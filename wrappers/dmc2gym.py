@@ -45,6 +45,7 @@ class DMC2GYMWrapper(gym.Env):
         width=84,
         camera_id=0,
         frame_skip=1,
+        single_precision=True,
         channels_first=True
     ):
         self._from_pixels = from_pixels
@@ -52,6 +53,7 @@ class DMC2GYMWrapper(gym.Env):
         self._width = width
         self._camera_id = camera_id
         self._frame_skip = frame_skip
+        self._single_precision = single_precision
         self._channels_first = channels_first
 
         # create task
@@ -75,12 +77,12 @@ class DMC2GYMWrapper(gym.Env):
         else:
             self._observation_space = _spec_to_box(
                 self._env.observation_spec().values(),
-                np.float64
+                np.float32 if self._single_precision else np.float64
             )
             
         self._state_space = _spec_to_box(
             self._env.observation_spec().values(),
-            np.float64
+            np.float32 if self._single_precision else np.float64
         )
         
 

@@ -1,27 +1,19 @@
 """Reference: https://github.com/facebookresearch/mbrl-lib/blob/main/mbrl/planning/trajectory_opt.py"""
-#%%
-import sys
-sys.path.append("..")
-
 from typing import Sequence, Tuple, Dict, Callable, List
 from functools import partial
 import copy
 
 import ray
-
 import numpy as np
 
 @ray.remote
-def rollout(model, checkpoint, action_sequence, planning_horizon):
-
+def rollout(model, checkpoint, action_sequence):
     model.load_checkpoint(checkpoint)
 
     terminated = False
     total_reward = 0
 
-    for time_step in range(planning_horizon):
-        action = action_sequence[time_step, :]
-        
+    for action in action_sequence:
         obs, reward, done, _ = model.step(action)
         reward = 0 if terminated else reward
 
@@ -76,7 +68,6 @@ class CEMOptimizer:
 
             pop = utils.truncated_normal_(population)
             population = mean + np.square(constrained_var) * pop
-            # print("population", population.shape)
         return population
 
     def _update_population_params(self, elite, mu, dispersion):
@@ -115,7 +106,7 @@ class CEMOptimizer:
             if best_values[best_idx] > best_value:
                 best_value = best_values[best_idx]
                 best_solution = copy.copy(elite[best_idx])
-            # print(best_values)
+
         return mu if self.return_mean_elite else best_solution
 
 
@@ -157,11 +148,10 @@ class TrajectoryOptimizer:
                                     upper_bound=np.tile(action_ub, (planning_horizon, 1)),)
 
         self.initial_solution = (action_lb + action_ub) / 2.
-        # print(self.initial_solution.shape)
         self.initial_solution = np.tile(self.initial_solution, (planning_horizon, 1)) # shape: Plan_horizon, act_dim
-        # print(self.initial_solution.shape)
+
         self.previous_solution = copy.copy(self.initial_solution)
-        # print('test copy', self.initial_solution.shape, self.previous_solution.shape)
+
         self.replan_freq = replan_freq
         self.keep_last_solution = keep_last_solution
         self.planning_horizon = planning_horizon
@@ -171,7 +161,7 @@ class TrajectoryOptimizer:
             trajectory_eval_fn,
             prior_solution=self.previous_solution,
         )
-        # print('best_solu', best_solution)
+
         # if need to reuse previous planned results
         if self.keep_last_solution:
             self.previous_solution = np.roll(best_solution, -self.replan_freq, axis=0)
@@ -186,7 +176,6 @@ class TrajectoryOptimizer:
 class CEMAgent:
     def __init__(self, 
                 optimizer_cfg: Dict, 
-                # trajectory_eval_fn: Callable,
                 action_lb: Sequence[float],
                 action_ub: Sequence[float],
                 planning_horizon: int = 1,
@@ -290,9 +279,11 @@ class CEMAgent:
         """
         assert len(action_sequences.shape) == 3
         population_size, planning_horizon, action_dim = action_sequences.shape
-        
-        total_rewards = [rollout.remote(model, checkpoint, action_sequences[i], planning_horizon)
+
+        total_rewards = [rollout.remote(model, checkpoint, action_sequences[i])
                          for i in range(population_size)]
         total_rewards = np.array(ray.get(total_rewards))
 
+        # reset model's state
+        model.load_checkpoint(checkpoint)
         return total_rewards.reshape((population_size, 1))
