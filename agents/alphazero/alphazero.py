@@ -9,7 +9,7 @@ from typing import Sequence, Tuple, Dict, Callable, List
 from functools import partial
 import copy
 from .search import mcts, puct, visit_count_policy
-from .networks import Actor, Critic
+from .networks import Actor, Critic, PolicyValue
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -23,12 +23,11 @@ class AZAgent:
                 discount: float,
                 num_simulations: int,
                 ):
-
-        self.actor = Actor(state_shape, num_actions).to(device)
-        self.critic = Critic(state_shape).to(device)
+        self.policy_value = PolicyValue(state_shape, num_actions).to(device)
         self.model = model
-        self.optimizer = optim.AdamW(list(self.actor.parameters()) + list(self.critic.parameters()),
-                            lr=lr, weight_decay=1e-4)
+
+        self.optimizer = optim.AdamW(self.policy_value.parameters(), 
+                                    lr=lr, weight_decay=1e-5)
 
         self.criterion = nn.CrossEntropyLoss(reduction="none")
 
@@ -39,12 +38,12 @@ class AZAgent:
     def _eval_fn(self, observation):
         with torch.no_grad():
             observation = torch.FloatTensor(np.expand_dims(observation, axis=0)).to(device)
-            logit = self.actor(observation)
-            value = self.critic(observation)
+            logits, value = self.policy_value(observation)
             
-        logits = logit.cpu().numpy().squeeze(axis=0)
+        logits = logits.cpu().numpy().squeeze(axis=0)
         value = value.item()
         probs = scipy.special.softmax(logits)
+
         return probs, value
 
     def act(self, observation):
@@ -62,23 +61,22 @@ class AZAgent:
             num_actions = self.num_actions,
             discount = self.discount
         )
-
+        print('before mcts', self._eval_fn(observation)[0])
         probs = visit_count_policy(root)
-
-        action = np.random.choice(self.num_actions, p=probs)
+        print('after mcts', probs)
+        action = np.int32(np.random.choice(self.num_actions, p=probs))
 
         return action, probs.astype(np.float32)
 
     def update(self, data): 
         """ Do a gradient update step on the loss. """     
-
-        logits = self.actor(data.state) # logtis, without passing softmax, shape: [B, A] 
-        value = self.critic(data.state) # [B, 1]
+        logits, value = self.policy_value(data.state) # logits: without passing softmax, shape: [B, A]; value shape: [B, 1]
 
         with torch.no_grad():
-            next_value = self.critic(data.next_state)
+            _, next_value = self.policy_value(data.next_state)
+
             target_value = data.reward + self.discount * data.not_done * next_value
-        
+
         value_loss = torch.square(value - target_value).mean(-1) # shpae: [B,]
 
         # policy loss distills MCTS policy into the polic network

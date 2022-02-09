@@ -36,3 +36,25 @@ class Critic(nn.Module):
         q = self.l3(q)
 
         return q
+
+class PolicyValue(nn.Module):
+    def __init__(self, state_shape: tuple, num_actions: int):
+        super(PolicyValue, self).__init__()
+
+        state_dim = np.prod(state_shape)
+
+        self.l1 = nn.Linear(state_dim, 50)
+        self.l2 = nn.Linear(50, 50)
+        self.policy = nn.Linear(50, num_actions)
+        self.value = nn.Linear(50, 1)
+
+    def forward(self, state):
+        state_flatten = torch.flatten(state, start_dim=1)
+
+        x = F.elu(self.l1(state_flatten))
+        x = F.elu(self.l2(x))
+
+        logits = self.policy(x)
+        value = self.value(x)
+
+        return logits, value

@@ -1,4 +1,7 @@
+# CONTROL_SUITE_ACTION_REPEATS = {'cartpole': 8, 'reacher': 4, 'finger': 2, 'cheetah': 4, 'ball_in_cup': 6, 'walker': 2}
+
 import os
+
 os.environ["MUJOCO_GL"] = "egl"
 import time
 from pathlib import Path

@@ -41,7 +41,7 @@ def make_env_and_model(
     """Create environment and corresponding model (learned or simulator)."""
     env = bsuite.load_from_id(bsuite_id)
     env = BS2GYMWrapper(env)
-    model = SimulatorWrapper(env)  # pytype: disable=attribute-error
+    model = SimulatorWrapper(env)  
 
     return env, model
 
@@ -68,20 +68,23 @@ def main(_):
 
     
     for i in range(env.bsuite_num_episodes):
-        ep_reward = 0
+        ep_reward, ep_len = 0, 0
         obs, done = env.reset(), False
         while not done:
             action, probs = agent.act(obs)
             next_obs, rew, done, _ = env.step(action)
 
             ep_reward += rew
+            ep_len += 1
+
             buffer.add(obs, action, next_obs, rew, done, {'pi': probs})
 
-            upate_info = agent.update(buffer.sample(batch_size=16))
+            if i > 1:
+                upate_info = agent.update(buffer.sample(batch_size=16))
             
             obs = next_obs
 
-        print(f'Episode: {i}, Episode reward: {ep_reward}')
+        print(f'Episode: {i}, Episode length: {ep_len}, Episode reward: {ep_reward}')
 
     
 if __name__ == '__main__':

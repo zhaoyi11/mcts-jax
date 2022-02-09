@@ -29,8 +29,7 @@ class Node:
         """ Returns the value from this node. """
         if self.visit_count:
             return self.total_value / self.visit_count
-        else:
-            return 0.
+        return 0.
 
     @property
     def children_visits(self) -> np.ndarray:
@@ -153,7 +152,7 @@ def puct(node: Node, ucb_scaling: float = 1.) -> types.Action:
 def visit_count_policy(root: Node, temperature: float = 1.) -> types.Probs:
     """Probability weighted by visit^{1/temp} of children nodes."""
     visits = root.children_visits
-    
+
     if np.sum(visits) == 0:  # uniform policy for zero visits
         visits += 1
     rescaled_visits = visits**(1 / temperature)
